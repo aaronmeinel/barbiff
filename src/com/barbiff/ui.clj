@@ -1,4 +1,18 @@
 (ns com.barbiff.ui
+  "Hiccup-based UI components for the workout tracking application.
+   
+   Components are organized by abstraction level, from low-level primitives
+   to high-level page layouts:
+   
+   - PRIMITIVES: Basic UI elements (cards, inputs, buttons, badges)
+   - SET COMPONENTS: Individual set rendering (input rows, completed rows)
+   - EXERCISE COMPONENTS: Exercise cards (headers, column headers, sets lists)
+   - WORKOUT COMPONENTS: Workout and microcycle rendering
+   - PAGE COMPONENTS: Page-level layouts (controls, event log, debug sections)
+   
+   Domain logic (workout filtering, completion checking) lives in
+   com.barbiff.domain.workout-filtering. This namespace focuses purely on
+   rendering Hiccup data structures."
   (:require [cheshire.core :as cheshire]
             [clojure.java.io :as io]
             [com.barbiff.settings :as settings]
@@ -61,6 +75,9 @@
 ;; ====================================
 ;; PRIMITIVES - Low-level UI elements
 ;; ====================================
+;;
+;; Reusable building blocks: cards, inputs, buttons, badges.
+;; These have no knowledge of workout domain logic.
 
 (defn card [class & content]
   (into [:div.shadow-sm {:class (str "bg-base-100 dark:bg-base-200 " class)}] content))
@@ -103,6 +120,10 @@
 ;; ====================================
 ;; SET COMPONENTS - Individual set rendering
 ;; ====================================
+;;
+;; Components for rendering individual sets within an exercise.
+;; Includes input rows (for logging new sets) and completed rows (for showing logged sets).
+;; Uses wf/set-complete? from domain layer to determine set state.
 
 (def set-grid-layout "grid.w-full.grid-cols-8.pr-4")
 (def set-col-weight "col-span-3.flex.items-center.justify-center")
@@ -165,6 +186,10 @@
 ;; ====================================
 ;; EXERCISE COMPONENTS - Exercise cards
 ;; ====================================
+;;
+;; Components for rendering complete exercises (groups of sets).
+;; Includes exercise headers, column headers, and sets lists.
+;; Determines which set is "first incomplete" to enable the input form.
 
 (defn exercise-header [exercise]
   [:div.px-4
@@ -196,6 +221,10 @@
 ;; ====================================
 ;; WORKOUT COMPONENTS - Workout & plan structure
 ;; ====================================
+;;
+;; Components for rendering workouts and microcycles.
+;; Uses wf/find-current-workout to determine which workout to display.
+;; The app shows only ONE workout at a time (current active or next incomplete).
 
 (defn muscle-group-badge []
   ;; Placeholder for future muscle group feature
@@ -241,6 +270,9 @@
 ;; ====================================
 ;; PAGE COMPONENTS - Controls & event log
 ;; ====================================
+;;
+;; Top-level page components: control buttons, debug sections, event logs.
+;; workout-page is the main entry point that composes all other components.
 
 (defn control-button [type label icon]
   (biff/form

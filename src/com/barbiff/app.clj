@@ -24,7 +24,13 @@
 
 ;; HTTP Parameter Parsing
 
-(defn parse-params [params]
+(defn parse-params
+  "Parse HTTP form parameters into a simple domain map.
+   
+   Converts string keys to keywords and parses numeric values.
+   This is the entry point of the transformation pipeline:
+   HTTP params → domain map → domain events → DB events"
+  [params]
   {:type (keyword (get params "event/type"))
    :exercise-id (get params "event/exercise")
    :weight (when-let [w (get params "event/weight")] (when (seq w) (Double/parseDouble w)))
@@ -41,8 +47,25 @@
 
 (defn ->db-event
   "Convert a domain event to a database event document for persistence.
-   Domain events: {:type :event-type :exercise name :weight w ...}
-   DB events: {:db/doc-type :event :event/type :event-type :event/exercise name ...}"
+   
+   This is the final step in the transformation pipeline, adding DB-specific
+   metadata to pure domain events before they're stored.
+   
+   Domain events (from business logic):
+     {:type :set-logged :exercise \"Bench Press\" :weight 100 :reps 8}
+   
+   DB events (for XTDB persistence):
+     {:db/doc-type :event
+      :event/user <uid>
+      :event/timestamp :db/now
+      :event/type :set-logged
+      :event/exercise \"Bench Press\"
+      :event/weight 100
+      :event/reps 8}
+   
+   The :event/ namespace prefix allows XTDB queries like:
+     {:find [(pull event [*])]
+      :where [[event :event/user uid] [event :event/type]]}"
   [uid domain-event]
   (let [base {:db/doc-type :event
               :event/user uid
@@ -57,7 +80,24 @@
 
 ;; HTTP Handler
 
-(defn log-event [{:keys [session params biff/db] :as ctx}]
+(defn log-event
+  "HTTP handler for logging workout events.
+   
+   Event transformation pipeline:
+   1. Parse HTTP params into simple map (:type, :exercise-id, :weight, :reps)
+   2. Fetch user's existing events from DB
+   3. Normalize DB events → domain events (strip DB namespace prefixes)
+   4. Pass domain events to pure business logic (setlog/events-for-set-log)
+   5. Business logic generates all required events (startup + set-logged)
+   6. Convert domain events → DB events (add :db/doc-type, :event/ namespace)
+   7. Persist DB events via biff/submit-tx
+   
+   Why normalize DB → domain → DB?
+   - Business logic is pure and DB-agnostic
+   - Domain events are simple maps: {:type :set-logged :exercise \"Bench\" :weight 100}
+   - DB events have persistence metadata: {:db/doc-type :event :event/type :set-logged ...}
+   - This separation allows testing domain logic without DB"
+  [{:keys [session params biff/db] :as ctx}]
   (let [uid (:uid session)
         events (get-user-events db uid)
         {:keys [type exercise-id weight reps]} (parse-params params)]
