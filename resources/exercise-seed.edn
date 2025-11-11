@@ -1,0 +1,117 @@
+;; Exercise Library Seed Data
+;; This file contains a standard set of exercises to seed the database.
+;; Users can customize recovery volumes after import.
+
+[;; Chest
+ {:name "Bench Press"
+  :muscle-groups [:chest :triceps :shoulders]
+  :equipment [:barbell :bench]
+  :notes "Compound pressing movement. Keep elbows at 45 degrees."
+  :max-recoverable-sets 6}
+
+ {:name "Incline Dumbbell Press"
+  :muscle-groups [:chest :shoulders :triceps]
+  :equipment [:dumbbells :bench]
+  :notes "Upper chest emphasis. 30-45 degree incline."
+  :max-recoverable-sets 5}
+
+ {:name "Dips"
+  :muscle-groups [:chest :triceps :shoulders]
+  :equipment [:dip-bars]
+  :notes "Lean forward for chest emphasis. Compound movement."
+  :max-recoverable-sets 4}
+
+ ;; Back
+ {:name "Barbell Row"
+  :muscle-groups [:back :biceps]
+  :equipment [:barbell]
+  :notes "Pull to lower chest. Keep torso near parallel."
+  :max-recoverable-sets 6}
+
+ {:name "Pull-ups"
+  :muscle-groups [:back :biceps]
+  :equipment [:pull-up-bar]
+  :notes "Full ROM. Chin over bar. Great compound movement."
+  :max-recoverable-sets 5}
+
+ {:name "Lat Pulldown"
+  :muscle-groups [:back :biceps]
+  :equipment [:cable-machine]
+  :notes "Pull to upper chest. Controlled eccentric."
+  :max-recoverable-sets 5}
+
+ ;; Legs - Quad Dominant
+ {:name "Squat"
+  :muscle-groups [:quads :glutes :hamstrings]
+  :equipment [:barbell :rack]
+  :notes "Compound leg movement. Full depth when possible."
+  :max-recoverable-sets 6}
+
+ {:name "Front Squat"
+  :muscle-groups [:quads :core]
+  :equipment [:barbell :rack]
+  :notes "Quad emphasis. Upright torso."
+  :max-recoverable-sets 5}
+
+ {:name "Leg Press"
+  :muscle-groups [:quads :glutes]
+  :equipment [:leg-press-machine]
+  :notes "Feet shoulder width. Control the eccentric."
+  :max-recoverable-sets 6}
+
+ ;; Legs - Hip Dominant
+ {:name "Romanian Deadlift"
+  :muscle-groups [:hamstrings :glutes :lower-back]
+  :equipment [:barbell]
+  :notes "Hip hinge. Very fatiguing - low recoverable volume."
+  :max-recoverable-sets 3}
+
+ {:name "Conventional Deadlift"
+  :muscle-groups [:hamstrings :glutes :back :core]
+  :equipment [:barbell]
+  :notes "Most fatiguing exercise. Full body compound."
+  :max-recoverable-sets 2}
+
+ {:name "Leg Curl"
+  :muscle-groups [:hamstrings]
+  :equipment [:leg-curl-machine]
+  :notes "Hamstring isolation. Less systemic fatigue."
+  :max-recoverable-sets 6}
+
+ ;; Shoulders
+ {:name "Overhead Press"
+  :muscle-groups [:shoulders :triceps]
+  :equipment [:barbell :rack]
+  :notes "Compound pressing. Keep core tight."
+  :max-recoverable-sets 5}
+
+ {:name "Lateral Raise"
+  :muscle-groups [:shoulders]
+  :equipment [:dumbbells]
+  :notes "Side delt isolation. Moderate weight."
+  :max-recoverable-sets 6}
+
+ ;; Arms
+ {:name "Barbell Curl"
+  :muscle-groups [:biceps]
+  :equipment [:barbell]
+  :notes "Bicep mass builder. Control the eccentric."
+  :max-recoverable-sets 8}
+
+ {:name "Dumbbell Curl"
+  :muscle-groups [:biceps]
+  :equipment [:dumbbells]
+  :notes "Can do more volume. Easy to recover from."
+  :max-recoverable-sets 10}
+
+ {:name "Tricep Pushdown"
+  :muscle-groups [:triceps]
+  :equipment [:cable-machine]
+  :notes "Tricep isolation. High volume tolerance."
+  :max-recoverable-sets 8}
+
+ {:name "Skullcrusher"
+  :muscle-groups [:triceps]
+  :equipment [:barbell :bench]
+  :notes "Heavy tricep work. Watch elbow health."
+  :max-recoverable-sets 5}]
