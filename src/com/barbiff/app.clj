@@ -3,6 +3,7 @@
             [com.barbiff.middleware :as mid]
             [com.barbiff.ui :as ui]
             [com.barbiff.domain.hardcorefunctionalprojection :as proj]
+            [com.barbiff.domain.setlogging :as setlog]
             [xtdb.api :as xt]))
 
 ;; Workout Tracking
@@ -21,77 +22,72 @@
                                          {:prescribed-reps 5 :prescribed-weight 140}
                                          {:prescribed-reps 5 :prescribed-weight 140}]}]}]}]})
 
+;; HTTP Parameter Parsing
+
+(defn parse-params [params]
+  {:type (keyword (get params "event/type"))
+   :exercise-id (get params "event/exercise")
+   :weight (when-let [w (get params "event/weight")] (when (seq w) (Double/parseDouble w)))
+   :reps (when-let [r (get params "event/reps")] (when (seq r) (Integer/parseInt r)))})
+
+;; Database Queries
+
 (defn get-user-events [db uid]
   (sort-by :event/timestamp
            (q db '{:find (pull event [*]) :in [uid]
                    :where [[event :event/user uid] [event :event/type]]} uid)))
 
-(defn find-workout-for-exercise [exercise-name]
-  (some (fn [mc]
-          (some #(when (some (fn [e] (= exercise-name (:name e))) (:exercises %)) %)
-                (:workouts mc)))
-        (:microcycles sample-plan)))
+;; Domain Event to DB Event Conversion
 
-(defn has-active-session? [events session-type]
-  (let [start-type (keyword (str (name session-type) "-started"))
-        end-type (keyword (str (name session-type) "-completed"))
-        events-vec (vec events)
-        last-start (last (keep-indexed #(when (= start-type (:event/type %2)) %1) events-vec))
-        last-end (last (keep-indexed #(when (= end-type (:event/type %2)) %1) events-vec))]
-    (or (nil? last-end) (and last-start last-end (> last-start last-end)))))
+(defn ->db-event
+  "Convert a domain event to a database event document for persistence.
+   Domain events: {:type :event-type :exercise name :weight w ...}
+   DB events: {:db/doc-type :event :event/type :event-type :event/exercise name ...}"
+  [uid domain-event]
+  (let [base {:db/doc-type :event
+              :event/user uid
+              :event/timestamp :db/now
+              :event/type (:type domain-event)}]
+    (cond-> base
+      (:exercise domain-event) (assoc :event/exercise (:exercise domain-event))
+      (:weight domain-event) (assoc :event/weight (:weight domain-event))
+      (:reps domain-event) (assoc :event/reps (:reps domain-event))
+      (:name domain-event) (assoc :event/name (:name domain-event))
+      (:day domain-event) (assoc :event/day (name (:day domain-event))))))
 
-(defn make-event [uid type & {:as extras}]
-  (merge {:db/doc-type :event :event/user uid :event/timestamp :db/now :event/type type} extras))
-
-(defn parse-params [params]
-  {:type (keyword (get params "event/type"))
-   :exercise (get params "event/exercise")
-   :weight (when-let [w (get params "event/weight")] (when (seq w) (Double/parseDouble w)))
-   :reps (when-let [r (get params "event/reps")] (when (seq r) (Integer/parseInt r)))
-   :name (get params "event/name")
-   :day (get params "event/day")})
+;; HTTP Handler
 
 (defn log-event [{:keys [session params biff/db] :as ctx}]
   (let [uid (:uid session)
         events (get-user-events db uid)
-        {:keys [type exercise weight reps name day]} (parse-params params)
+        {:keys [type exercise-id weight reps]} (parse-params params)]
 
-        events-to-submit
-        (if (= type :set-logged)
-          (let [workout (find-workout-for-exercise exercise)
-                auto-events (cond-> []
-                              (not (has-active-session? events :microcycle))
-                              (conj (make-event uid :microcycle-started))
-                              (and workout (not (has-active-session? events :workout)))
-                              (conj (make-event uid :workout-started
-                                                :event/name (:name workout)
-                                                :event/day (name (:day workout)))))]
-            (conj auto-events
-                  (make-event uid type :event/exercise exercise :event/weight weight :event/reps reps)))
-          [(make-event uid type :event/name name :event/day day)])]
+    (when (and (= type :set-logged) exercise-id weight reps)
+      (let [;; Convert DB events to domain events for business logic
+            projection-events (->> events
+                                   (map setlog/normalize-event)
+                                   (map setlog/->projection-event))
 
-    (biff/submit-tx ctx events-to-submit)
+            ;; Generate all needed events using pure domain logic
+            domain-events (setlog/events-for-set-log projection-events
+                                                     sample-plan
+                                                     exercise-id
+                                                     weight
+                                                     reps)
+
+            ;; Convert back to DB events for persistence
+            db-events (map #(->db-event uid %) domain-events)]
+
+        (biff/submit-tx ctx db-events)))
+
     {:status 303 :headers {"location" "/app/workout"}}))
-
-(defn ->projection-event [e]
-  (cond-> {:type (:event/type e)}
-    (:event/name e) (assoc :name (:event/name e))
-    (:event/day e) (assoc :day (:event/day e))
-    (:event/exercise e) (assoc :exercise (:event/exercise e))
-    (:event/weight e) (assoc :weight (:event/weight e))
-    (:event/reps e) (assoc :reps (:event/reps e))))
-
-(defn normalize-event [e]
-  (-> e
-      (update :event/type keyword)
-      (update :event/day (fn [d] (when d (keyword d))))
-      (update :event/weight (fn [w] (when w (Double/parseDouble (str w)))))
-      (update :event/reps (fn [r] (when r (Integer/parseInt (str r)))))))
 
 (defn workout-page [{:keys [session biff/db]}]
   (let [{:user/keys [email]} (xt/entity db (:uid session))
         events (get-user-events db (:uid session))
-        projection-events (->> events (map normalize-event) (map ->projection-event))
+        projection-events (->> events
+                               (map setlog/normalize-event)
+                               (map setlog/->projection-event))
         merged-plan (proj/merge-plan-with-progress sample-plan (proj/build-state projection-events))]
     (ui/workout-page {:email email
                       :merged-plan merged-plan
