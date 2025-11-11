@@ -44,7 +44,38 @@
    Logic:
    - If no active microcycle, create microcycle-started event
    - If no active workout, create workout-started event with name/day from plan
-   - Otherwise, return empty sequence"
+   - Otherwise, return empty sequence
+   
+   TODO/KNOWN ISSUE: Workout separation bug
+   ========================================
+   This function doesn't check if the exercise belongs to the CURRENT workout.
+   It only checks if ANY workout is active.
+   
+   Problem:
+   If you're in the middle of \"Upper\" workout and try to log a set for \"Squat\"
+   (which belongs to \"Lower\" workout), this function will NOT start a new workout.
+   Instead, the Squat set gets added to the Upper workout, causing all exercises
+   to group incorrectly in the first workout.
+   
+   Why it happens:
+   - active-session? only counts workout-started vs workout-completed events
+   - It doesn't validate that the active workout actually contains this exercise
+   
+   How to fix:
+   1. Add a helper: (exercise-belongs-to-workout? exercise-name workout)
+   2. Check if current active workout contains the exercise
+   3. If not, emit workout-completed for current + workout-started for correct one
+   4. This would auto-transition between workouts when user switches exercises
+   
+   Example fix:
+   (let [active-workout (find-active-workout events plan)
+         exercise-workout (find-workout-for-exercise plan exercise-name)
+         needs-workout-change? (and active-workout
+                                    (not= (:name active-workout)
+                                          (:name exercise-workout)))]
+     (cond-> []
+       needs-workout-change? (conj (make-event :workout-completed {}))
+       (or needs-workout? needs-workout-change?) (conj workout-started-event)))"
   [events plan exercise-name]
   (let [needs-microcycle? (not (active-session? events :microcycle))
         needs-workout? (not (active-session? events :workout))
@@ -70,7 +101,29 @@
 
 (defn events-for-set-log
   "Generate all events needed to log a set.
-   Returns sequence of events: startup events + set-logged event."
+   Returns sequence of events: startup events + set-logged event.
+   
+   Examples:
+   
+   ;; First set ever - needs microcycle AND workout
+   (events-for-set-log [] plan \"Bench Press\" 100 8)
+   => [{:type :microcycle-started}
+       {:type :workout-started :name \"Upper\" :day :monday}
+       {:type :set-logged :exercise \"Bench Press\" :weight 100 :reps 8}]
+   
+   ;; Workout already active - just log the set
+   (events-for-set-log [{:type :microcycle-started}
+                        {:type :workout-started :name \"Upper\"}]
+                       plan \"Bench Press\" 100 8)
+   => [{:type :set-logged :exercise \"Bench Press\" :weight 100 :reps 8}]
+   
+   ;; Workout completed - need new workout
+   (events-for-set-log [{:type :microcycle-started}
+                        {:type :workout-started :name \"Upper\"}
+                        {:type :workout-completed}]
+                       plan \"Squat\" 140 5)
+   => [{:type :workout-started :name \"Lower\" :day :wednesday}
+       {:type :set-logged :exercise \"Squat\" :weight 140 :reps 5}]"
   [events plan exercise-name weight reps]
   (let [startup (required-startup-events events plan exercise-name)
         set-log (set-logged-event exercise-name weight reps)]
