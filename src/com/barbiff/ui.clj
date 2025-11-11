@@ -2,6 +2,7 @@
   (:require [cheshire.core :as cheshire]
             [clojure.java.io :as io]
             [com.barbiff.settings :as settings]
+            [com.barbiff.domain.workout-filtering :as wf]
             [com.biffweb :as biff]
             [ring.middleware.anti-forgery :as csrf]
             [ring.util.response :as ring-response]
@@ -89,11 +90,15 @@
 (defn render-items [items render-fn]
   (map-indexed (fn [i item] ^{:key i} (render-fn i item)) items))
 
-(defn log-checkbox [enabled?]
+(defn log-checkbox [state]
+  ;; state can be :enabled, :disabled, or :checked
   [:div.flex.h-9.w-9.items-center.justify-center
    [:div.relative.flex.items-center.justify-center.rounded-sm.h-7.w-7
-    {:class (if enabled? "bg-emerald-600 dark:bg-emerald-500" "bg-base-200 dark:bg-base-content/30")}
-    [:div.absolute.inset-1.bg-base-100.dark:bg-base-200 {:class (when-not enabled? "hidden")}]]])
+    {:class (if (= state :disabled)
+              "bg-base-200 dark:bg-base-content/30"
+              "bg-emerald-600 dark:bg-emerald-500")}
+    [:div.absolute.inset-1.bg-base-100.dark:bg-base-200
+     {:class (when (= state :checked) "hidden")}]]])
 
 ;; ====================================
 ;; SET COMPONENTS - Individual set rendering
@@ -138,7 +143,7 @@
      (set-grid-cell set-col-spacer)
      (set-grid-cell set-col-log
                     [:button.disabled:cursor-not-allowed {:type "submit" :disabled (not enabled?)}
-                     (log-checkbox enabled?)])]]))
+                     (log-checkbox (if enabled? :enabled :disabled))])]]))
 
 (defn set-completed-row [set-data]
   [:div.flex.items-center
@@ -147,15 +152,15 @@
     (set-grid-cell set-col-weight (set-value-wrapper (:actual-weight set-data)))
     (set-grid-cell set-col-reps (set-value-wrapper (:actual-reps set-data)))
     (set-grid-cell set-col-spacer)
-    (set-grid-cell set-col-log (log-checkbox true))]])
+    (set-grid-cell set-col-log (log-checkbox :checked))]])
 
-(defn render-set [idx exercise-name set-data]
-  (let [has-actual? (and (:actual-weight set-data) (:actual-reps set-data))
-        is-first? (zero? idx)]
-    [:li.ml-4.py-2.5 {:data-set-id (str "set-" idx)}
-     (if has-actual?
+(defn render-set [idx exercise-name set-data is-first-incomplete?]
+  (let [is-complete? (wf/set-complete? set-data)]
+    [:li.ml-4.py-2.5 {:data-set-id (str "set-" idx)
+                      :title (pr-str {:is-complete? is-complete? :set-data set-data})}  ;; DEBUG
+     (if is-complete?
        (set-completed-row set-data)
-       (set-input-row exercise-name set-data is-first?))]))
+       (set-input-row exercise-name set-data is-first-incomplete?))]))
 
 ;; ====================================
 ;; EXERCISE COMPONENTS - Exercise cards
@@ -165,9 +170,7 @@
   [:div.px-4
    [:div.flex.items-start.justify-between
     [:h3.line-clamp-2.font-medium.text-base-content (:name exercise)]
-    [:div.flex.items-center.gap-4]] ; Info icon placeholder
-   [:h4 {:class "mt-1 text-xs uppercase text-base-content/60"}
-    (or (:equipment exercise) "bodyweight")]])
+    [:div.flex.items-center.gap-4]]])
 
 (defn exercise-column-headers []
   [:div.relative.mt-2
@@ -180,30 +183,37 @@
      (set-grid-cell set-col-log [:div.pr-1.text-sm.font-medium.uppercase "log"])]]])
 
 (defn exercise-sets-list [exercise]
-  [:ol {:class "divide-y divide-base-200/80 dark:divide-base-100"}
-   (render-items (:sets exercise) #(render-set %1 (:name exercise) %2))])
-
-(defn render-exercise [exercise]
-  (card "pb-2 pt-4 mb-2"
-        (exercise-header exercise)
-        (exercise-column-headers)
-        (exercise-sets-list exercise)))
+  (let [sets (:sets exercise)]
+    [:ol {:class "divide-y divide-base-200/80 dark:divide-base-100"}
+     (render-items sets
+                   (fn [idx set-data]
+                     (let [is-complete? (wf/set-complete? set-data)
+                           previous-sets (take idx sets)
+                           all-previous-complete? (every? wf/set-complete? previous-sets)
+                           is-first-incomplete? (and (not is-complete?) all-previous-complete?)]
+                       (render-set idx (:name exercise) set-data is-first-incomplete?))))]))
 
 ;; ====================================
 ;; WORKOUT COMPONENTS - Workout & plan structure
 ;; ====================================
 
-(defn muscle-group-badge [name]
+(defn muscle-group-badge []
+  ;; Placeholder for future muscle group feature
   [:span.-mb-2.ml-4.mt-4.flex.w-fit.items-center.gap-4.bg-base-100.dark:bg-base-200
    [:span.flex.items-center.gap-2.rounded-sm.px-2.py-0.5
     {:style {:background-color "rgba(224, 62, 195, 0.314)"
              :border "1px solid rgba(224, 62, 195, 0.314)"}}
-    [:span.text-xs.font-semibold.uppercase name]]])
+    [:span.text-xs.font-semibold.uppercase "Muscle Group"]]])
+
+(defn render-exercise [exercise]
+  (card "pb-2 pt-4 mb-2"
+        (muscle-group-badge)
+        (exercise-header exercise)
+        (exercise-column-headers)
+        (exercise-sets-list exercise)))
 
 (defn render-workout [workout]
-  [:div
-   (muscle-group-badge (:name workout))
-   (into [:div] (render-items (:exercises workout) (fn [_ e] (render-exercise e))))])
+  (into [:div] (render-items (:exercises workout) (fn [_ e] (render-exercise e)))))
 
 (defn render-microcycle [idx microcycle]
   [:div.mb-6
@@ -211,13 +221,22 @@
     "Week " (inc idx)]
    (into [:div] (render-items (:workouts microcycle) (fn [_ w] (render-workout w))))])
 
-(defn render-projection [merged-plan]
-  [:div.relative.mx-auto.max-w-3xl.pb-4
-   [:div.sticky.inset-x-0.top-0.z-30.mb-4
-    [:div.relative.z-10.border-t.pt-3.shadow.dark:shadow-2xl
-     {:class "border-base-200/30 bg-base-100 dark:bg-base-200"}
-     [:h2.px-4.text-xs.uppercase {:class "text-base-content/60"} "Training Plan"]]]
-   (into [:div] (render-items (:microcycles merged-plan) render-microcycle))])
+;; Workout filtering logic moved to com.barbiff.domain.workout-filtering
+;; These are kept as thin wrappers for backwards compatibility if needed
+
+(defn render-projection [merged-plan projection-events]
+  (if-let [{:keys [microcycle-idx workout]} (wf/find-current-workout merged-plan projection-events)]
+    [:div.relative.mx-auto.max-w-3xl.pb-4
+     [:div.sticky.inset-x-0.top-0.z-30.mb-4
+      [:div.relative.z-10.border-t.pt-3.shadow.dark:shadow-2xl
+       {:class "border-base-200/30 bg-base-100 dark:bg-base-200"}
+       [:h2.px-4.text-xs.uppercase {:class "text-base-content/60"}
+        "Week " (inc microcycle-idx) " - " (:name workout)]]]
+     [:div (render-workout workout)]]
+    ;; No workouts left
+    [:div.relative.mx-auto.max-w-3xl.pb-4.text-center.py-8
+     [:p.text-lg.font-bold "All workouts complete! 🎉"]
+     [:p.text-sm {:class "text-base-content/60 mt-2"} "Great job! Start a new microcycle to continue."]]))
 
 ;; ====================================
 ;; PAGE COMPONENTS - Controls & event log
@@ -262,24 +281,27 @@
 
 (defn page-controls []
   [:div.px-4.py-2.flex.gap-2
-   (control-button "workout-completed" "Complete Workout" "✓")
-   (control-button "microcycle-completed" "Complete Microcycle" "✓✓")])
+   (control-button "workout-completed" "Complete Workout" "✓")])
 
-(defn debug-section [projection-events]
+(defn debug-section [projection-events merged-plan progress]
   [:details.mx-4.mb-4 {:class "bg-warning/10 border border-warning p-2"}
    [:summary.cursor-pointer.text-xs.uppercase "Debug"]
-   [:pre.mt-2.text-xs.overflow-auto.bg-base-100.p-2 (pr-str projection-events)]])
+   [:pre.mt-2.text-xs.overflow-auto.bg-base-100.p-2
+    [:div "Projection Events:"]
+    (pr-str projection-events)
+    [:div.mt-4 "Progress from build-state:"]
+    (pr-str progress)
+    [:div.mt-4 "Merged Plan:"]
+    (pr-str merged-plan)]]) (defn event-log-section [events]
+                              [:details.mx-4.mb-6
+                               [:summary.cursor-pointer.text-sm.font-bold.p-4.bg-base-200.uppercase
+                                "Event Log (" (count events) ")"]
+                               [:div.p-4.border.border-base-200.border-t-0
+                                (if (empty? events)
+                                  [:p {:class "text-center text-base-content/40 py-4"} "No events yet"]
+                                  (into (spacer 2) (render-items (reverse events) (fn [_ e] (render-event e)))))]])
 
-(defn event-log-section [events]
-  [:details.mx-4.mb-6
-   [:summary.cursor-pointer.text-sm.font-bold.p-4.bg-base-200.uppercase
-    "Event Log (" (count events) ")"]
-   [:div.p-4.border.border-base-200.border-t-0
-    (if (empty? events)
-      [:p {:class "text-center text-base-content/40 py-4"} "No events yet"]
-      (into (spacer 2) (render-items (reverse events) (fn [_ e] (render-event e)))))]])
-
-(defn workout-page [{:keys [email merged-plan projection-events events]}]
+(defn workout-page [{:keys [email merged-plan projection-events progress events]}]
   (page
    {}
    [:main.relative.flex.h-full.w-full.flex-col
@@ -288,6 +310,6 @@
       [:div.min-h-0.grow.overflow-auto.overscroll-contain.outline-none.bg-base-200.dark:bg-base-300 {:tabindex "1"}
        (page-header email)
        (page-controls)
-       (render-projection merged-plan)
-       (debug-section projection-events)
+       (render-projection merged-plan projection-events)
+       (debug-section projection-events merged-plan progress)
        (event-log-section events)]]]]))

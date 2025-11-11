@@ -88,10 +88,12 @@
         projection-events (->> events
                                (map setlog/normalize-event)
                                (map setlog/->projection-event))
-        merged-plan (proj/merge-plan-with-progress sample-plan (proj/build-state projection-events))]
+        progress (proj/build-state projection-events)
+        merged-plan (proj/merge-plan-with-progress sample-plan progress)]
     (ui/workout-page {:email email
                       :merged-plan merged-plan
                       :projection-events projection-events
+                      :progress progress  ; Add for debugging
                       :events events})))
 
 (def module

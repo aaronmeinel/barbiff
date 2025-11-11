@@ -50,14 +50,14 @@
         needs-workout? (not (active-session? events :workout))
         workout (when needs-workout?
                   (find-workout-for-exercise plan exercise-name))]
-    (cond-> []
-      needs-microcycle?
-      (conj (make-event :microcycle-started {}))
-
-      (and needs-workout? workout)
-      (conj (make-event :workout-started
-                        {:name (:name workout)
-                         :day (:day workout)})))))
+    (vec
+     (concat
+      (when needs-microcycle?
+        [(make-event :microcycle-started {})])
+      (when (and needs-workout? workout)
+        [(make-event :workout-started
+                     {:name (:name workout)
+                      :day (:day workout)})])))))
 
 (defn set-logged-event
   "Create a set-logged event from parameters.
