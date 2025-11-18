@@ -5,24 +5,38 @@
             [com.barbiff.domain.hardcorefunctionalprojection :as proj]
             [com.barbiff.domain.setlogging :as setlog]
             [com.barbiff.domain.events :as events]
+            [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [rum.core :as rum]
             [xtdb.api :as xt]))
 
+
+;; TODO Move this to dedicated file, clean up a bit, write tests
+;; Loading template from an edn and transforming into an actual plan. Not working perfectly yet.
+(defn expand-sets-in-exercise
+  "Takes a map that represents an exercise in a template and returns exactly that with a sequence of actual sets, not only the number of sets.
+  "
+  [{:keys [name n-sets muscle-groups equipment]}]
+  (let [sets (repeat n-sets {:prescribed-weight nil :prescribed-reps nil :actual-weight nil :actual-reps nil})]
+    {:name name :sets sets :muscle-groups muscle-groups :equipment equipment}))
+
+
+
+(defn expand-exercises [{:keys [name day exercises]}]
+  {:name name :day day :exercises (mapv expand-sets-in-exercise exercises)})
+
+
+(defn ->plan [template]
+  {:microcycles (repeat (:n-microcycles template) (update template :workouts #(mapv expand-exercises %)))})
+
+(def template (->> (io/resource "sample-plan.edn")
+                   slurp
+                   edn/read-string))
+
+
 ;; Workout Tracking
 
-(def sample-plan
-  {:microcycles
-   [{:workouts
-     [{:name "Upper" :day :monday
-       :exercises [{:name "Bench Press" :sets [{:prescribed-reps 8 :prescribed-weight 100}
-                                               {:prescribed-reps 8 :prescribed-weight 100}
-                                               {:prescribed-reps 8 :prescribed-weight 100}]}
-                   {:name "Barbell Row" :sets [{:prescribed-reps 8 :prescribed-weight 80}
-                                               {:prescribed-reps 8 :prescribed-weight 80}]}]}
-      {:name "Lower" :day :wednesday
-       :exercises [{:name "Squat" :sets [{:prescribed-reps 5 :prescribed-weight 140}
-                                         {:prescribed-reps 5 :prescribed-weight 140}
-                                         {:prescribed-reps 5 :prescribed-weight 140}]}]}]}]})
+
 
 ;; Database Queries
 
@@ -35,7 +49,7 @@
 
 (defn log-event
   "HTTP handler for logging workout events.
-   
+
    Event transformation pipeline:
    1. Parse HTTP params into simple map (:type, :exercise-id, :weight, :reps)
    2. Fetch user's existing events from DB
@@ -44,7 +58,7 @@
    5. Business logic generates all required events (startup + set-logged)
    6. Convert domain events → DB events (add :db/doc-type, :event/ namespace)
    7. Persist DB events via biff/submit-tx
-   
+
    Why normalize DB → domain → DB?
    - Business logic is pure and DB-agnostic
    - Domain events are simple maps: {:type :set-logged :exercise \"Bench\" :weight 100}
@@ -88,8 +102,8 @@
 
 (defn get-active-plan
   "Get user's active plan structure. Falls back to sample-plan if none exists."
-  [db user-id]
-  sample-plan)  ; Fallback to hardcoded plan
+  []
+  ->plan template)
 
 (defn workout-page [{:keys [session biff/db]}]
   (let [{:user/keys [email]} (xt/entity db (:uid session))
@@ -98,7 +112,7 @@
                                (map setlog/normalize-event)
                                (map setlog/->projection-event))
         progress (proj/build-state projection-events)
-        plan (get-active-plan db (:uid session))
+        plan (->plan template)
         merged-plan (proj/merge-plan-with-progress plan progress)]
     (ui/workout-page {:email email
                       :merged-plan merged-plan

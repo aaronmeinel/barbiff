@@ -1,0 +1,39 @@
+;; A sample training plan - template
+;; This works as follows:
+;; The plan-template contains the following info:
+;; - What does one microcycle (most commonly referred to as a "week") look like?
+;;   A microcycle consists of a number of workouts
+;;   A workout consists of a sequence of exercises. The minimal required information here is :name and :n-sets
+;;   The latter number is going to be used to expand into an actual vector of sets
+;;   You can (and probably should) add more data about the exercise, e.g. the :muscle-group - that will help structuring your workouts as well as
+;;  allow for some sweet analytics later on
+;; - The number of microcycles
+;;
+;; Thats it!
+;; The actual plan is going to be generated on the fly. This allows keeping the definition of a plan concise and short.
+
+
+{:name "Twice a week upper body focus"
+ :n-microcycles 4
+ :workouts [{:name "A" :day :monday
+             :exercises [{:name "Dumbbell Press (Incline)" :n-sets 2 :muscle-groups [:chest] :equipment [:bench :dumbbells]}
+                         {:name "Cable Triceps Pushdown (Bar)" :n-sets 3 :muscle-groups [:triceps] :equipment [:cable-machine]}
+                         {:name "Seated Cable Row" :n-sets 3 :muscle-groups [:back] :equipment [:cable-machine]}
+                         {:name "Lying Biceps Dumbbell Curl" :n-sets 2 :muscle-groups [:biceps] :equipment [:bench :dumbbells]}
+                         {:name "Barbell Upright Row" :n-sets 3 :muscle-groups [:shoulders] :equipment [:barbell]}
+                         {:name "Barbell Squat (High Bar)" :n-sets 2 :muscle-groups [:quads] :equipment [:barbell :rack]}
+                         {:name "Bodyweight Squat" :n-sets 1 :muscle-groups [:quads] :equipment [:body]}
+                         {:name "Back Raise" :n-sets 1 :muscle-groups [:hamstrings] :equipment [:back-raise-machine]}]}
+
+
+            {:name "B" :day :thursday
+             :exercises [{:name "Pulldown (Narrow Grip)" :n-sets 2 :muscle-groups [:back] :equipment [:cable-machine]}
+                         {:name "Cable Flexion Row" :n-sets 2 :muscle-groups [:back] :equipment [:cable-machine]}
+                         {:name "Barbell Curl (Narrow Grip)" :n-sets 3 :muscle-groups [:biceps] :equipment [:barbell]}
+                         {:name "Cable Overhead Triceps Extension" :n-sets 3 :muscle-groups [:triceps] :equipment [:cable-machine]}
+                         {:name "Pushup (Deficit)" :n-sets 2 :muscle-groups [:chest] :equipment [:body :deficit]}
+                         {:name "Dumbbell Shoulder Press" :n-sets 4 :muscle-groups [:shoulders] :equipment [:dumbbells]}
+                         {:name "Back Raise" :n-sets 1 :muscle-groups [:hamstrings] :equipment [:back-raise-machine]}
+                         {:name "Barbell Squat (High Bar)" :n-sets 2 :muscle-groups [:quads] :equipment [:barbell :rack]}
+                         {:name "Bodyweight Squat" :n-sets 1 :muscle-groups [:quads] :equipment [:body]}]
+             }]}
